@@ -1693,7 +1693,6 @@ fi
 AM_CONDITIONAL(ENABLE_OMKAFKA, test x$enable_omkafka = xyes)
 
 #MONGODB SUPPORT
-
 AC_ARG_ENABLE(ommongodb,
         [AS_HELP_STRING([--enable-ommongodb],[Compiles ommongodb module @<:@default=no@:>@])],
         [case "${enableval}" in
@@ -1708,6 +1707,22 @@ if test "x$enable_ommongodb" = "xyes"; then
 fi
 AM_CONDITIONAL(ENABLE_OMMONGODB, test x$enable_ommongodb = xyes)
 # end of mongodb code
+
+#SONARW SUPPORT
+AC_ARG_ENABLE(omsonarw,
+        [AS_HELP_STRING([--enable-omsonarw],[Compiles omsonarw module @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_omsonarw="yes" ;;
+          no) enable_omsonarw="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-omsonarw) ;;
+         esac],
+        [enable_omsonarw=no]
+)
+if test "x$enable_omsonarw" = "xyes"; then
+	PKG_CHECK_MODULES(LIBMONGO_CLIENT, libmongo-client >= 0.1.4)
+fi
+AM_CONDITIONAL(ENABLE_OMSONARW, test x$enable_omsonarw = xyes)
+# end of sonarw code
 
 # BEGIN ZMQ3 INPUT SUPPORT
 AC_ARG_ENABLE(imzmq3,
@@ -2000,6 +2015,7 @@ AC_CONFIG_FILES([Makefile \
 		plugins/omsnmp/Makefile \
 		plugins/omudpspoof/Makefile \
 		plugins/ommongodb/Makefile \
+		plugins/omsonarw/Makefile \
 		plugins/mmnormalize/Makefile \
 		plugins/mmjsonparse/Makefile \
 		plugins/mmaudit/Makefile \
@@ -2109,6 +2125,7 @@ echo "    MySql support enabled:                    $enable_mysql"
 echo "    libdbi support enabled:                   $enable_libdbi"
 echo "    PostgreSQL support enabled:               $enable_pgsql"
 echo "    mongodb support enabled:                  $enable_ommongodb"
+echo "    sonarw support enabled:                   $enable_omsonarw"
 echo "    hiredis support enabled:                  $enable_omhiredis"
 echo
 echo "---{ protocol support }---"

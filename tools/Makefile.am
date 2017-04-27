@@ -71,6 +71,12 @@ logctl_SOURCES = logctl.c
 logctl_CPPFLAGS =  $(LIBMONGO_CLIENT_CFLAGS)
 logctl_LDADD = $(LIBMONGO_CLIENT_LIBS)
 endif
+if ENABLE_OMSONARW
+bin_PROGRAMS += logctl
+logctl_SOURCES = logctl.c
+logctl_CPPFLAGS =  $(LIBMONGO_CLIENT_CFLAGS)
+logctl_LDADD = $(LIBMONGO_CLIENT_LIBS)
+endif
 if ENABLE_GUARDTIME
 bin_PROGRAMS += rsgtutil
 rsgtutil = rsgtutil.c

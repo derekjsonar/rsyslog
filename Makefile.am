@@ -127,6 +127,10 @@ if ENABLE_OMMONGODB
 SUBDIRS += plugins/ommongodb
 endif
 
+if ENABLE_OMSONARW
+SUBDIRS += plugins/omsonarw
+endif
+
 if ENABLE_OMHIREDIS
 SUBDIRS += contrib/omhiredis
 endif
