@@ -1719,7 +1719,7 @@ AC_ARG_ENABLE(omsonarw,
         [enable_omsonarw=no]
 )
 if test "x$enable_omsonarw" = "xyes"; then
-	PKG_CHECK_MODULES(LIBMONGO_CLIENT, libmongo-client >= 0.1.4)
+	PKG_CHECK_MODULES(LIBSONAR_CLIENT, libmongoc-1.0 >= 1.3.6)
 fi
 AM_CONDITIONAL(ENABLE_OMSONARW, test x$enable_omsonarw = xyes)
 # end of sonarw code

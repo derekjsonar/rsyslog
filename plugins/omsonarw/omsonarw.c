@@ -17,6 +17,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#define __USE_XOPEN
+#define _GNU_SOURCE
+
+
+#include <bson.h>
+#include <bcon.h>
+#include <mongoc.h>
 #include "config.h"
 #include <stdio.h>
 #include <string.h>
@@ -27,13 +34,15 @@
 #include <signal.h>
 #include <stdint.h>
 #include <time.h>
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic ignored "-Wunknown-attributes"
-#include <mongo.h>
-#pragma GCC diagnostic pop
+// #pragma GCC diagnostic push
+// #pragma GCC diagnostic ignored "-Wpragmas"
+// #pragma GCC diagnostic ignored "-Wunknown-attributes"
+// #include <mongo.h>
+// #pragma GCC diagnostic pop
 #include <json.h>
 
+typedef off_t off64_t;
+#include "typedefs.h"
 #include "rsyslog.h"
 #include "conf.h"
 #include "syslogd-types.h"
@@ -44,6 +53,7 @@
 #include "errmsg.h"
 #include "cfsysline.h"
 #include "unicode-helper.h"
+//#include "glib.h"
 
 MODULE_TYPE_OUTPUT
 MODULE_TYPE_NOKEEP
@@ -55,17 +65,22 @@ DEFobjCurrIf(errmsg)
 DEFobjCurrIf(datetime)
 
 typedef struct _instanceData {
-	mongo_sync_connection *conn;
 	struct json_tokener *json_tokener; /* only if (tplName != NULL) */
-	uchar *server;
-	int port;
-        uchar *db;
-	uchar *collection;
-	uchar *uid;
-	uchar *pwd;
-	uchar *dbNcoll;
-	uchar *tplName;
+    char *db_str;
+	char *coll_str;
+	char *uri_str;
+	char *tplName;
 	int bErrMsgPermitted;	/* only one errmsg permitted per connection */
+
+   mongoc_client_t      *client;
+   //mongoc_database_t    *database;
+   mongoc_collection_t  *collection;
+   bson_t *command,
+	   reply,
+	   *insert;
+   bson_error_t          error;
+   bool                  retval;
+	
 } instanceData;
 
 typedef struct wrkrInstanceData {
@@ -76,12 +91,9 @@ typedef struct wrkrInstanceData {
 /* tables for interfacing with the v6 config system */
 /* action (instance) parameters */
 static struct cnfparamdescr actpdescr[] = {
-	{ "server", eCmdHdlrGetWord, 0 },
-	{ "serverport", eCmdHdlrInt, 0 },
-	{ "db", eCmdHdlrGetWord, 0 },
-	{ "collection", eCmdHdlrGetWord, 0 },
-	{ "uid", eCmdHdlrGetWord, 0 },
-	{ "pwd", eCmdHdlrGetWord, 0 },
+	{ "db_str", eCmdHdlrGetWord, 0 },
+	{ "coll_str", eCmdHdlrGetWord, 0 },
+	{ "uri_str", eCmdHdlrGetWord, 0 },
 	{ "template", eCmdHdlrGetWord, 0 }
 };
 static struct cnfparamblk actpblk =
@@ -112,24 +124,23 @@ ENDisCompatibleWithFeature
 
 static void closeMongoDB(instanceData *pData)
 {
-	if(pData->conn != NULL) {
-                mongo_sync_disconnect(pData->conn);
-		pData->conn = NULL;
-	}
+   mongoc_collection_destroy (pData->collection);
+   //mongoc_database_destroy (pData->database);
+   mongoc_client_destroy (pData->client);
+   mongoc_cleanup ();
+
 }
 
 
 BEGINfreeInstance
 CODESTARTfreeInstance
 	closeMongoDB(pData);
-	if (pData->json_tokener != NULL)
+	if (pData->json_tokener != NULL) {
 		json_tokener_free(pData->json_tokener);
-	free(pData->server);
-	free(pData->db);
-	free(pData->collection);
-	free(pData->uid);
-	free(pData->pwd);
-	free(pData->dbNcoll);
+	}
+	free(pData->db_str);
+	free(pData->coll_str);
+	free(pData->uri_str);
 	free(pData->tplName);
 ENDfreeInstance
 
@@ -147,66 +158,66 @@ ENDdbgPrintInstInfo
 
 /* report error that occured during *last* operation
  */
-static void
-reportMongoError(instanceData *pData)
-{
-	char errStr[1024];
-	gchar *err;
-	int eno;
+// static void
+// reportMongoError(instanceData *pData)
+// {
+// 	char errStr[1024];
+// 	gchar *err;
+// 	int eno;
 
-	if(pData->bErrMsgPermitted) {
-		eno = errno;
-		if(mongo_sync_cmd_get_last_error(pData->conn, (gchar*)pData->db, &err) == TRUE) {
-			errmsg.LogError(0, RS_RET_ERR, "omsonarw: error: %s", err);
-		} else {
-			DBGPRINTF("omsonarw: we had an error, but can not obtain specifics, "
-				  "using plain old errno error message generator\n");
-			errmsg.LogError(0, RS_RET_ERR, "omsonarw: error: %s",
-				rs_strerror_r(eno, errStr, sizeof(errStr)));
-		}
-		pData->bErrMsgPermitted = 0;
-	}
-}
+// 	if(pData->bErrMsgPermitted) {
+// 		eno = errno;
+// 		if(mongo_sync_cmd_get_last_error(pData->client, (gchar*)pData->db_str, &err) == TRUE) {
+// 			errmsg.LogError(0, RS_RET_ERR, "omsonarw: error: %s", err);
+// 		} else {
+// 			DBGPRINTF("omsonarw: we had an error, but can not obtain specifics, "
+// 				  "using plain old errno error message generator\n");
+// 			errmsg.LogError(0, RS_RET_ERR, "omsonarw: error: %s",
+// 				rs_strerror_r(eno, errStr, sizeof(errStr)));
+// 		}
+// 		pData->bErrMsgPermitted = 0;
+// 	}
+// }
 
 
 static rsRetVal initMongoDB(instanceData *pData, int bSilent)
 {
-	const char *server;
 	DEFiRet;
 
-	server = (pData->server == NULL) ? "127.0.0.1" : (const char*) pData->server;
-	DBGPRINTF("omsonarw: trying connect to '%s' at port %d\n", server, pData->port);
+	mongoc_init();
 
-	pData->conn = mongo_sync_connect(server, pData->port, TRUE);
-	if(pData->conn == NULL) {
-		if(!bSilent) {
-			reportMongoError(pData);
-			dbgprintf("omsonarw: can not initialize MongoDB handle");
-		}
-                ABORT_FINALIZE(RS_RET_SUSPENDED);
+	if (bSilent) 
+	{
+
+	}
+	
+	if (pData->uri_str == NULL)
+	{
+		DBGPRINTF("omsonarw: cannot connect due to NULL uri string\n");
 	}
 
-	/* perform authentication */
-	if(pData->uid && pData->pwd) {
+	pData->client = mongoc_client_new(pData->uri_str);
+	if (pData->client == NULL)
+	{
+		DBGPRINTF("omsonarw: cannot connect due to uri string error: '%s'\n", pData->uri_str);
+		ABORT_FINALIZE(RS_RET_SUSPENDED);
+	}
 
-	  /* require both uid and pwd before attempting authentication */
-	  if(!pData->uid || !pData->pwd) {
-	    dbgprintf("omsonarw: authentication requires uid and pwd attributes set; skipping");
-	  }
-	  else if(!mongo_sync_cmd_authenticate(pData->conn, (const gchar*)pData->db,
-	  	  			(const gchar*)pData->uid, (const gchar*)pData->pwd)) {
-	    if(!bSilent) {
-	      reportMongoError(pData);
-	      dbgprintf("omsonarw: could not authenticate %s against '%s'", pData->uid, pData->db);
-	    }
+	if (pData->coll_str == NULL)
+	{
+		DBGPRINTF("omsonarw: cannot connect due to NULL coll string\n");
+	}
 
-	    /* no point in continuing with an unauthenticated connection */
-	    closeMongoDB(pData);
-	    ABORT_FINALIZE(RS_RET_SUSPENDED);
-	  }
-	  else {
-	    dbgprintf("omsonarw: authenticated with %s against '%s'", pData->uid, pData->db);
-	  }
+	if (pData->db_str == NULL)
+	{
+		DBGPRINTF("omsonarw: cannot connect due to NULL db string\n");
+	}
+
+	pData->collection = mongoc_client_get_collection(pData->client, pData->db_str, pData->coll_str);
+
+	if (pData->collection == NULL)
+	{
+		DBGPRINTF("omsonarw: cannot create collection\n");
 	}
 
 finalize_it:
@@ -253,33 +264,33 @@ i10pow(int exp)
  * a moving target, so we may run out of sync (and stay so to retain
  * backward compatibility, which we consider pretty important).
  */
-static bson *
+static bson_t *
 getDefaultBSON(smsg_t *pMsg)
 {
-	bson *doc = NULL;
-	uchar *procid; short unsigned procid_free; rs_size_t procid_len;
-	uchar *tag; short unsigned tag_free; rs_size_t tag_len;
-	uchar *pid; short unsigned pid_free; rs_size_t pid_len;
-	uchar *sys; short unsigned sys_free; rs_size_t sys_len;
-	uchar *msg; short unsigned msg_free; rs_size_t msg_len;
+	bson_t *doc = NULL;
+	char *procid; short unsigned procid_free; rs_size_t procid_len;
+	char *tag; short unsigned tag_free; rs_size_t tag_len;
+	char *pid; short unsigned pid_free; rs_size_t pid_len;
+	char *sys; short unsigned sys_free; rs_size_t sys_len;
+	char *msg; short unsigned msg_free; rs_size_t msg_len;
 	int severity, facil;
-	gint64 ts_gen, ts_rcv; /* timestamps: generated, received */
+	int64 ts_gen, ts_rcv; /* timestamps: generated, received */
 	int secfrac;
 	msgPropDescr_t cProp; /* we use internal implementation knowledge... */
 
 	cProp.id = PROP_PROGRAMNAME;
-	procid = MsgGetProp(pMsg, NULL, &cProp, &procid_len, &procid_free, NULL);
+	procid = (char *)MsgGetProp(pMsg, NULL, &cProp, &procid_len, &procid_free, NULL);
 	cProp.id = PROP_SYSLOGTAG;
-	tag = MsgGetProp(pMsg, NULL, &cProp, &tag_len, &tag_free, NULL);
+	tag = (char *)MsgGetProp(pMsg, NULL, &cProp, &tag_len, &tag_free, NULL);
 	cProp.id = PROP_PROCID;
-	pid = MsgGetProp(pMsg, NULL, &cProp, &pid_len, &pid_free, NULL);
+	pid = (char *)MsgGetProp(pMsg, NULL, &cProp, &pid_len, &pid_free, NULL);
 	cProp.id = PROP_HOSTNAME;
-	sys = MsgGetProp(pMsg, NULL, &cProp, &sys_len, &sys_free, NULL);
+	sys = (char *)MsgGetProp(pMsg, NULL, &cProp, &sys_len, &sys_free, NULL);
 	cProp.id = PROP_MSG;
-	msg = MsgGetProp(pMsg, NULL, &cProp, &msg_len, &msg_free, NULL);
+	msg = (char *)MsgGetProp(pMsg, NULL, &cProp, &msg_len, &msg_free, NULL);
 
 	/* TODO: move to datetime? Refactor in any case! rgerhards, 2012-03-30 */
-	ts_gen = (gint64) datetime.syslogTime2time_t(&pMsg->tTIMESTAMP) * 1000; /* ms! */
+	ts_gen = datetime.syslogTime2time_t(&pMsg->tTIMESTAMP) * 1000; /* ms! */
 	DBGPRINTF("omsonarw: ts_gen is %lld\n", (long long) ts_gen);
 	DBGPRINTF("omsonarw: secfrac is %d, precision %d\n",  pMsg->tTIMESTAMP.secfrac, pMsg->tTIMESTAMP.secfracPrecision);
 	if(pMsg->tTIMESTAMP.secfracPrecision > 3) {
@@ -290,7 +301,7 @@ getDefaultBSON(smsg_t *pMsg)
 		secfrac = pMsg->tTIMESTAMP.secfrac;
 	}
 	ts_gen += secfrac;
-	ts_rcv = (gint64) datetime.syslogTime2time_t(&pMsg->tRcvdAt) * 1000; /* ms! */
+	ts_rcv = datetime.syslogTime2time_t(&pMsg->tRcvdAt) * 1000; /* ms! */
 	if(pMsg->tRcvdAt.secfracPrecision > 3) {
 		secfrac = pMsg->tRcvdAt.secfrac / i10pow(pMsg->tRcvdAt.secfracPrecision - 3);
 	} else if(pMsg->tRcvdAt.secfracPrecision < 3) {
@@ -304,17 +315,19 @@ getDefaultBSON(smsg_t *pMsg)
 	severity = pMsg->iSeverity;
 	facil = pMsg->iFacility;
 
-	doc = bson_build(BSON_TYPE_STRING, "sys", sys, sys_len,
-			 BSON_TYPE_UTC_DATETIME, "time", ts_gen,
-			 BSON_TYPE_UTC_DATETIME, "time_rcvd", ts_rcv,
-			 BSON_TYPE_STRING, "msg", msg, msg_len,
-			 BSON_TYPE_INT32, "syslog_fac", facil,
-			 BSON_TYPE_INT32, "syslog_sever", severity,
-			 BSON_TYPE_STRING, "syslog_tag", tag, tag_len,
-			 BSON_TYPE_STRING, "procid", procid, procid_len,
-			 BSON_TYPE_STRING, "pid", pid, pid_len,
-			 BSON_TYPE_STRING, "level", getLumberjackLevel(pMsg->iSeverity), -1,
-			 BSON_TYPE_NONE);
+	doc = BCON_NEW("default",
+				   "{",
+				   "sys", BCON_UTF8(sys),
+				   "time", BCON_DATE_TIME(ts_gen),
+				   "time_rcvd", BCON_DATE_TIME(ts_rcv),
+				   "msg", BCON_UTF8(msg),
+				   "syslog_fac", BCON_INT32(facil),
+				   "syslog_sever", BCON_INT32(severity),
+				   "syslog_tag", BCON_UTF8(tag),
+				   "procid", BCON_UTF8(procid),
+				   "pid", BCON_UTF8(pid),
+				   "level", BCON_UTF8(getLumberjackLevel(pMsg->iSeverity)),
+				    "}");
 
 	if(procid_free) free(procid);
 	if(tag_free) free(tag);
@@ -322,67 +335,67 @@ getDefaultBSON(smsg_t *pMsg)
 	if(sys_free) free(sys);
 	if(msg_free) free(msg);
 
-	if(doc == NULL)
-		return doc;
-	bson_finish(doc);
 	return doc;
 }
 
-static bson *BSONFromJSONArray(struct json_object *json);
-static bson *BSONFromJSONObject(struct json_object *json);
-static gboolean BSONAppendExtendedJSON(bson *doc, const gchar *name, struct json_object *json);
+static bson_t *BSONFromJSONArray(struct json_object *json);
+static bson_t *BSONFromJSONObject(struct json_object *json);
+static bool BSONAppendExtendedJSON(bson_t *doc, const char *name, struct json_object *json);
 
 /* Append a BSON variant of json to doc using name.  Return TRUE on success */
-static gboolean
-BSONAppendJSONObject(bson *doc, const gchar *name, struct json_object *json)
+static bool
+BSONAppendJSONObject(bson_t *doc, const char *name, struct json_object *json)
 {
-	switch(json != NULL ? json_object_get_type(json) : json_type_null) {
+	switch (json != NULL ? json_object_get_type(json) : json_type_null)
+	{
 	case json_type_null:
-		return bson_append_null(doc, name);
+		return BSON_APPEND_NULL(doc, name);
 	case json_type_boolean:
-		return bson_append_boolean(doc, name,
-					   json_object_get_boolean(json));
+		return BSON_APPEND_BOOL(doc, name,
+								json_object_get_boolean(json));
 	case json_type_double:
-		return bson_append_double(doc, name,
-					  json_object_get_double(json));
-	case json_type_int: {
+		return BSON_APPEND_DOUBLE(doc, name,
+								  json_object_get_double(json));
+	case json_type_int:
+	{
 		int64_t i;
 
 		i = json_object_get_int64(json);
 		if (i >= INT32_MIN && i <= INT32_MAX)
-			return bson_append_int32(doc, name, i);
+			return BSON_APPEND_INT32(doc, name, i);
 		else
-			return bson_append_int64(doc, name, i);
+			return BSON_APPEND_INT64(doc, name, i);
 	}
-	case json_type_object: {
+	case json_type_object:
+	{
 
 		if (BSONAppendExtendedJSON(doc, name, json) == TRUE)
-		    return TRUE;
+			return TRUE;
 
-		bson *sub;
-		gboolean ok;
+		bson_t *sub;
+		bool ok;
 
 		sub = BSONFromJSONObject(json);
 		if (sub == NULL)
 			return FALSE;
-		ok = bson_append_document(doc, name, sub);
+		ok = BSON_APPEND_DOCUMENT_BEGIN(doc, name, sub);
 		bson_free(sub);
 		return ok;
 	}
-	case json_type_array: {
-		bson *sub;
-		gboolean ok;
+	case json_type_array:
+	{
+		bson_t *sub;
+		bool ok;
 
 		sub = BSONFromJSONArray(json);
 		if (sub == NULL)
 			return FALSE;
-		ok = bson_append_document(doc, name, sub);
-		bson_free(sub);
+		ok = BSON_APPEND_DOCUMENT_BEGIN(doc, name, sub);
+		bson_destroy(sub);
 		return ok;
 	}
 	case json_type_string:
-		return bson_append_string(doc, name,
-					  json_object_get_string(json), -1);
+		return BSON_APPEND_UTF8(doc, name, json_object_get_string(json));
 
 	default:
 		return FALSE;
@@ -396,8 +409,8 @@ BSONAppendJSONObject(bson *doc, const gchar *name, struct json_object *json)
  * to work since quite a while, I do not make any changes now.
  * rgerhards, 2016-04-09
  */
-static gboolean
-BSONAppendExtendedJSON(bson *doc, const gchar *name, struct json_object *json)
+static bool
+BSONAppendExtendedJSON(bson_t *doc, const char *name, struct json_object *json)
 {
 	struct json_object_iterator itEnd = json_object_iter_end(json);
 	struct json_object_iterator it = json_object_iter_begin(json);
@@ -406,26 +419,26 @@ BSONAppendExtendedJSON(bson *doc, const gchar *name, struct json_object *json)
 		const char *const key = json_object_iter_peek_name(&it);
 		if (strcmp(key, "$date") == 0) {
 			struct tm tm;
-			gint64 ts;
+			int64 ts;
 			struct json_object *val;
 
 			val = json_object_iter_peek_value(&it);
 			DBGPRINTF("omsonarw: extended json date detected %s", json_object_get_string(val));
 			tm.tm_isdst = -1;
 			strptime(json_object_get_string(val), "%Y-%m-%dT%H:%M:%S%z", &tm);
-			ts = 1000 * (gint64) mktime(&tm);
-			return bson_append_utc_datetime(doc, name, ts);
+			ts = 1000 * mktime(&tm);
+			return BSON_APPEND_DATE_TIME(doc, name, ts);
 		}
 	}
 	return FALSE;
 }
 
 /* Return a BSON variant of json, which must be a json_type_array */
-static bson *
+static bson_t *
 BSONFromJSONArray(struct json_object *json)
 {
 	/* Way more than necessary */
-	bson *doc = NULL;
+	bson_t *doc = NULL;
 	size_t i, array_len;
 
 	doc = bson_new();
@@ -444,22 +457,19 @@ BSONFromJSONArray(struct json_object *json)
 			goto error;
 	}
 
-	if(bson_finish(doc) == FALSE)
-		goto error;
-
 	return doc;
 
 error:
 	if(doc != NULL)
-		bson_free(doc);
+		bson_destroy(doc);
 	return NULL;
 }
 
 /* Return a BSON variant of json, which must be a json_type_object */
-static bson *
+static bson_t *
 BSONFromJSONObject(struct json_object *json)
 {
-	bson *doc = NULL;
+	bson_t *doc = NULL;
 
 	doc = bson_new();
 	if(doc == NULL)
@@ -474,9 +484,6 @@ BSONFromJSONObject(struct json_object *json)
 		json_object_iter_next(&it);
 	}
 
-	if(bson_finish(doc) == FALSE)
-		goto error;
-
 	return doc;
 
 error:
@@ -487,19 +494,19 @@ error:
 
 BEGINtryResume
 CODESTARTtryResume
-	if(pWrkrData->pData->conn == NULL) {
+	if(pWrkrData->pData->client == NULL) {
 		iRet = initMongoDB(pWrkrData->pData, 1);
 	}
 ENDtryResume
 
 BEGINdoAction_NoStrings
-	bson *doc = NULL;
+	bson_t *doc = NULL;
 	instanceData *pData;
 CODESTARTdoAction
 	pthread_mutex_lock(&mutDoAct);
 	pData = pWrkrData->pData;
 	/* see if we are ready to proceed */
-	if(pData->conn == NULL) {
+	if(pData->client == NULL) {
 		CHKiRet(initMongoDB(pData, 0));
 	}
 
@@ -513,11 +520,11 @@ CODESTARTdoAction
 		/* FIXME: is this a correct return code? */
 		ABORT_FINALIZE(RS_RET_ERR);
 	}
-	if(mongo_sync_cmd_insert(pData->conn, (char*)pData->dbNcoll, doc, NULL)) {
+	if(mongoc_collection_insert(pData->collection, MONGOC_INSERT_NONE, doc, NULL, &(pData->error))) {
 		pData->bErrMsgPermitted = 1;
 	} else {
 		dbgprintf("omsonarw: insert error\n");
-		reportMongoError(pData);
+		//reportMongoError(pData);
 		/* close on insert error to permit resume */
 		closeMongoDB(pData);
 		ABORT_FINALIZE(RS_RET_SUSPENDED);
@@ -526,26 +533,28 @@ CODESTARTdoAction
 finalize_it:
 	pthread_mutex_unlock(&mutDoAct);
 	if(doc != NULL)
-		bson_free(doc);
+		bson_destroy(doc);
 ENDdoAction
 
 
 static void
 setInstParamDefaults(instanceData *pData)
 {
-	pData->server = NULL;
-	pData->port = 27017;
-	pData->db = NULL;
-	pData->collection= NULL;
-	pData->uid = NULL;
-	pData->pwd = NULL;
+	pData->db_str = NULL;
+	pData->coll_str = NULL;
+	pData->uri_str = NULL;
 	pData->tplName = NULL;
+
+	pData->client = NULL;
+	//pData->database = NULL;
+	pData->coll_str = NULL;
+	pData->command = NULL;
+	pData->insert = NULL;
 }
 
 BEGINnewActInst
 	struct cnfparamvals *pvals;
 	int i;
-	unsigned lendb, lencoll;
 CODESTARTnewActInst
 	if((pvals = nvlstGetParams(lst, &actpblk, NULL)) == NULL) {
 		ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
@@ -558,20 +567,14 @@ CODESTARTnewActInst
 	for(i = 0 ; i < actpblk.nParams ; ++i) {
 		if(!pvals[i].bUsed)
 			continue;
-		if(!strcmp(actpblk.descr[i].name, "server")) {
-			pData->server = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
-		} else if(!strcmp(actpblk.descr[i].name, "serverport")) {
-			pData->port = (int) pvals[i].val.d.n;
-		} else if(!strcmp(actpblk.descr[i].name, "db")) {
-			pData->db = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
-		} else if(!strcmp(actpblk.descr[i].name, "collection")) {
-			pData->collection = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
-		} else if(!strcmp(actpblk.descr[i].name, "uid")) {
-			pData->uid = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
-		} else if(!strcmp(actpblk.descr[i].name, "pwd")) {
-			pData->pwd = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+        if(!strcmp(actpblk.descr[i].name, "db_str")) {
+			pData->db_str = es_str2cstr(pvals[i].val.d.estr, NULL);
+		} else if(!strcmp(actpblk.descr[i].name, "coll_str")) {
+			pData->coll_str = es_str2cstr(pvals[i].val.d.estr, NULL);
+		} else if(!strcmp(actpblk.descr[i].name, "uri_str")) {
+			pData->uri_str = es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(actpblk.descr[i].name, "template")) {
-			pData->tplName = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+			pData->tplName = es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else {
 			dbgprintf("omsonarw: program error, non-handled "
 			  "param '%s'\n", actpblk.descr[i].name);
@@ -586,22 +589,10 @@ CODESTARTnewActInst
 		CHKmalloc(pData->json_tokener = json_tokener_new());
 	}
 
-	if(pData->db == NULL)
-		CHKmalloc(pData->db = (uchar*)strdup("syslog"));
-	if(pData->collection == NULL)
-		 CHKmalloc(pData->collection = (uchar*)strdup("log"));
-
-	/* we now create a db+collection string as we need to pass this
-	 * into the API and we do not want to generate it each time ;)
-	 * +2 ==> dot as delimiter and \0
-	 */
-	lendb = strlen((char*)pData->db);
-	lencoll = strlen((char*)pData->collection);
-	CHKmalloc(pData->dbNcoll = malloc(lendb+lencoll+2));
-	memcpy(pData->dbNcoll, pData->db, lendb);
-	pData->dbNcoll[lendb] = '.';
-	/* lencoll+1 => copy \0! */
-	memcpy(pData->dbNcoll+lendb+1, pData->collection, lencoll+1);
+	if(pData->db_str == NULL)
+		CHKmalloc(pData->db_str = strdup("syslog"));
+	if(pData->coll_str == NULL)
+		 CHKmalloc(pData->coll_str = strdup("log"));
 
 CODE_STD_FINALIZERnewActInst
 	cnfparamvalsDestruct(pvals, &actpblk);
@@ -650,7 +641,7 @@ CODEmodInit_QueryRegCFSLineHdlr
 
 	/* check if the rsyslog core supports parameter passing code */
 	bJSONPassingSupported = 0;
-	localRet = pHostQueryEtryPt((uchar*)"OMSRgetSupportedTplOpts",
+	localRet = pHostQueryEtryPt((uchar *)"OMSRgetSupportedTplOpts",
 				    &pomsrGetSupportedTplOpts);
 	if(localRet == RS_RET_OK) {
 		/* found entry point, so let's see if core supports msg passing */
