@@ -34,11 +34,6 @@
 #include <signal.h>
 #include <stdint.h>
 #include <time.h>
-// #pragma GCC diagnostic push
-// #pragma GCC diagnostic ignored "-Wpragmas"
-// #pragma GCC diagnostic ignored "-Wunknown-attributes"
-// #include <mongo.h>
-// #pragma GCC diagnostic pop
 #include <json.h>
 
 typedef off_t off64_t;
@@ -53,7 +48,6 @@ typedef off_t off64_t;
 #include "errmsg.h"
 #include "cfsysline.h"
 #include "unicode-helper.h"
-//#include "glib.h"
 
 MODULE_TYPE_OUTPUT
 MODULE_TYPE_NOKEEP
@@ -80,7 +74,7 @@ typedef struct _instanceData {
 	   *insert;
    bson_error_t          error;
    bool                  retval;
-	
+
 } instanceData;
 
 typedef struct wrkrInstanceData {
@@ -128,7 +122,6 @@ static void closeMongoDB(instanceData *pData)
    //mongoc_database_destroy (pData->database);
    mongoc_client_destroy (pData->client);
    mongoc_cleanup ();
-
 }
 
 
@@ -158,26 +151,6 @@ ENDdbgPrintInstInfo
 
 /* report error that occured during *last* operation
  */
-// static void
-// reportMongoError(instanceData *pData)
-// {
-// 	char errStr[1024];
-// 	gchar *err;
-// 	int eno;
-
-// 	if(pData->bErrMsgPermitted) {
-// 		eno = errno;
-// 		if(mongo_sync_cmd_get_last_error(pData->client, (gchar*)pData->db_str, &err) == TRUE) {
-// 			errmsg.LogError(0, RS_RET_ERR, "omsonarw: error: %s", err);
-// 		} else {
-// 			DBGPRINTF("omsonarw: we had an error, but can not obtain specifics, "
-// 				  "using plain old errno error message generator\n");
-// 			errmsg.LogError(0, RS_RET_ERR, "omsonarw: error: %s",
-// 				rs_strerror_r(eno, errStr, sizeof(errStr)));
-// 		}
-// 		pData->bErrMsgPermitted = 0;
-// 	}
-// }
 
 
 static rsRetVal initMongoDB(instanceData *pData, int bSilent)
@@ -218,6 +191,7 @@ static rsRetVal initMongoDB(instanceData *pData, int bSilent)
 	if (pData->collection == NULL)
 	{
 		DBGPRINTF("omsonarw: cannot create collection\n");
+
 	}
 
 finalize_it:
@@ -470,7 +444,6 @@ static bson_t *
 BSONFromJSONObject(struct json_object *json)
 {
 	bson_t *doc = NULL;
-
 	doc = bson_new();
 	if(doc == NULL)
 		goto error;
