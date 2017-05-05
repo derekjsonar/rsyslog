@@ -20,7 +20,6 @@
 #define __USE_XOPEN
 #define _GNU_SOURCE
 
-
 #include <bson.h>
 #include <bcon.h>
 #include <mongoc.h>
@@ -48,6 +47,7 @@ typedef off_t off64_t;
 #include "errmsg.h"
 #include "cfsysline.h"
 #include "unicode-helper.h"
+#include "sonardecode.h"
 
 MODULE_TYPE_OUTPUT
 MODULE_TYPE_NOKEEP
