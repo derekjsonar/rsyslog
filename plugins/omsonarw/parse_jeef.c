@@ -107,7 +107,10 @@ int add_field(raw_message_fields *flds, const char *key, const char *value)
 }
 
 
+void convert_cef_names(raw_message_fields *flds)
+{
 
+}
 
 
 typedef struct parsing_state
@@ -128,17 +131,19 @@ struct key_to_bson_type_tag {
   const char *default_value;
 }  key_to_bson_type[] = 
 {
+   { "act" , "deviceAction", BSON_TYPE_UTF8, NULL }, 
+   { "agt" , "agentAddress", BSON_TYPE_UTF8, NULL }, 
+   { "ahost" , "agentHost", BSON_TYPE_UTF8, NULL }, 
+   { "aid" , "agentId", BSON_TYPE_UTF8, NULL }, 
+   { "app" , "applicationProtocol", BSON_TYPE_UTF8, NULL }, 
    { "art" , "agentReceiptTime", BSON_TYPE_DATE_TIME, NULL }, 
-   { "cnt" , "baseEventCount", BSON_TYPE_INT64, NULL }, 
-   { "in" , "bytesIn", BSON_TYPE_INT64, NULL }, 
-   { "out" , "bytesOut", BSON_TYPE_INT64, NULL }, 
-   { "dpt" , "destinationPort", BSON_TYPE_INT64, NULL }, 
-   { "rt" , "deviceReceiptTime", BSON_TYPE_DATE_TIME, NULL }, 
-   { "fsize" , "fileSize", BSON_TYPE_INT64, NULL }, 
-   { "spt" , "sourcePort", BSON_TYPE_INT64, NULL }, 
-   { "start" , "startTime", BSON_TYPE_DATE_TIME, NULL }, 
-
- { "cfp1" , NULL, BSON_TYPE_DOUBLE, NULL }, 
+   { "at" , "agentType", BSON_TYPE_UTF8, NULL }, 
+   { "atz" , "agentTimeZone", BSON_TYPE_UTF8, NULL }, 
+   { "av" , "agentVersion", BSON_TYPE_UTF8, NULL }, 
+   { "cat" , "deviceEventCategory", BSON_TYPE_UTF8, NULL }, 
+   { "catdt" , "categoryDeviceType", BSON_TYPE_UTF8, NULL }, 
+   { "_cefVer" , "cefVersion", BSON_TYPE_UTF8, NULL }, 
+   { "cfp1" , NULL, BSON_TYPE_DOUBLE, NULL }, 
    { "cfp2" , NULL, BSON_TYPE_DOUBLE, NULL }, 
    { "cfp3" , NULL, BSON_TYPE_DOUBLE, NULL }, 
    { "cfp4" , NULL, BSON_TYPE_DOUBLE, NULL }, 
@@ -146,78 +151,79 @@ struct key_to_bson_type_tag {
    { "cn2" , NULL, BSON_TYPE_INT64, NULL }, 
    { "cn3" , NULL, BSON_TYPE_INT64, NULL }, 
    { "cn4" , NULL, BSON_TYPE_INT64, NULL }, 
+   { "cnt" , "baseEventCount", BSON_TYPE_INT64, NULL }, 
    { "destinationTranslatedPort" , NULL, BSON_TYPE_INT32, NULL }, 
+   { "devTime", "Device Time", BSON_TYPE_DATE_TIME, NULL} ,
    { "deviceCustomDate1" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
    { "deviceCustomDate2" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
-   { "dstBytes" , NULL, BSON_TYPE_INT64, NULL }, 
-   { "dstPackets" , NULL, BSON_TYPE_INT64, NULL }, 
-   { "dstPort" , NULL, BSON_TYPE_INT32, NULL }, 
-   { "dstPostNATPort" , NULL, BSON_TYPE_INT32, NULL }, 
-   { "dstPreNATPort" , NULL, BSON_TYPE_INT32, NULL }, 
-   { "end" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
-   { "fileCreateTime" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
-   { "fileModificationTime" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
-   { "oldFileCreateTime" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
-   { "oldFileModificationTime" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
-   { "oldFileSize" , NULL, BSON_TYPE_INT64, NULL }, 
-   { "sev" , NULL, BSON_TYPE_INT64, NULL }, 
-   { "sourceTranslatedPort" , NULL, BSON_TYPE_INT64, NULL }, 
-   { "srcPackets" , NULL, BSON_TYPE_INT64, NULL }, 
-   { "srcPort" , NULL, BSON_TYPE_INT32, NULL }, 
-   { "srcPostNATPort" , NULL, BSON_TYPE_INT32, NULL }, 
-   { "srcPreNATPort" , NULL, BSON_TYPE_INT32, NULL }, 
-   { "totalPackets" , NULL, BSON_TYPE_INT64, NULL }, 
- { "agt" , "agentAddress", BSON_TYPE_UTF8, NULL }, 
-   { "ahost" , "agentHost", BSON_TYPE_UTF8, NULL }, 
-   { "aid" , "agentId", BSON_TYPE_UTF8, NULL }, 
-   { "atz" , "agentTimeZone", BSON_TYPE_UTF8, NULL }, 
-   { "at" , "agentType", BSON_TYPE_UTF8, NULL }, 
-   { "av" , "agentVersion", BSON_TYPE_UTF8, NULL }, 
-   { "app" , "applicationProtocol", BSON_TYPE_UTF8, NULL }, 
-   { "catdt" , "categoryDeviceType", BSON_TYPE_UTF8, NULL }, 
-   { "_cefVer" , "cefVersion", BSON_TYPE_UTF8, NULL }, 
-   { "dst" , "destinationAddress", BSON_TYPE_UTF8, NULL }, 
    { "dhost" , "destinationHostName", BSON_TYPE_UTF8, NULL }, 
    { "dlat" , "destinationLatitude", BSON_TYPE_UTF8, NULL }, 
    { "dlong" , "destinationLongitude", BSON_TYPE_UTF8, NULL }, 
    { "dmac" , "destinationMacAddress", BSON_TYPE_UTF8, NULL }, 
    { "dntdom" , "destinationNTDomain", BSON_TYPE_UTF8, NULL }, 
    { "dpid" , "destinationProcessId", BSON_TYPE_UTF8, NULL }, 
+   { "dpriv" , "destinationUserPrivileges", BSON_TYPE_UTF8, NULL }, 
    { "dproc" , "destinationProcessName", BSON_TYPE_UTF8, NULL }, 
+   { "dpt" , "destinationPort", BSON_TYPE_INT64, NULL }, 
+   { "dstBytes" , NULL, BSON_TYPE_INT64, NULL }, 
+   { "dst" , "destinationAddress", BSON_TYPE_UTF8, NULL }, 
+   { "dstPackets" , NULL, BSON_TYPE_INT64, NULL }, 
+   { "dstPort" , NULL, BSON_TYPE_INT32, NULL }, 
+   { "dstPostNATPort" , NULL, BSON_TYPE_INT32, NULL }, 
+   { "dstPreNATPort" , NULL, BSON_TYPE_INT32, NULL }, 
    { "dtz" , "destinationTimeZone", BSON_TYPE_UTF8, NULL }, 
    { "duid" , "destinationUserId", BSON_TYPE_UTF8, NULL }, 
    { "duser" , "destinationUserName", BSON_TYPE_UTF8, NULL }, 
-   { "dpriv" , "destinationUserPrivileges", BSON_TYPE_UTF8, NULL }, 
-   { "act" , "deviceAction", BSON_TYPE_UTF8, NULL }, 
    { "dvc" , "deviceAddress", BSON_TYPE_UTF8, NULL }, 
-   { "cat" , "deviceEventCategory", BSON_TYPE_UTF8, NULL }, 
    { "dvchost" , "deviceHostName", BSON_TYPE_UTF8, NULL }, 
    { "dvcpid" , "deviceProcessId", BSON_TYPE_UTF8, NULL }, 
    { "end" , "endTime", BSON_TYPE_UTF8, NULL }, 
-   { "outcome" , "eventOutcome", BSON_TYPE_UTF8, NULL }, 
+   { "end" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
+   { "fileCreateTime" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
+   { "fileModificationTime" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
    { "fname" , "fileName", BSON_TYPE_UTF8, NULL }, 
+   { "fsize" , "fileSize", BSON_TYPE_INT64, NULL }, 
+   { "in" , "bytesIn", BSON_TYPE_INT64, NULL }, 
    { "mrt" , "managerReceiptTime", BSON_TYPE_UTF8, NULL }, 
    { "msg" , "message", BSON_TYPE_UTF8, NULL }, 
+   { "oldFileCreateTime" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
+   { "oldFileModificationTime" , NULL, BSON_TYPE_DATE_TIME, NULL }, 
+   { "oldFileSize" , NULL, BSON_TYPE_INT64, NULL }, 
+   { "out" , "bytesOut", BSON_TYPE_INT64, NULL }, 
+   { "outcome" , "eventOutcome", BSON_TYPE_UTF8, NULL }, 
+   { "proto" , "transportProtocol", BSON_TYPE_UTF8, NULL }, 
    { "request" , "requestUrl", BSON_TYPE_UTF8, NULL }, 
-   { "src" , "sourceAddress", BSON_TYPE_UTF8, NULL }, 
+   { "rt" , "deviceReceiptTime", BSON_TYPE_DATE_TIME, NULL }, 
+   { "sev" , NULL, BSON_TYPE_INT64, NULL }, 
    { "shost" , "sourceHostName", BSON_TYPE_UTF8, NULL }, 
    { "slat" , "sourceLatitude", BSON_TYPE_UTF8, NULL }, 
    { "slong" , "sourceLongitude", BSON_TYPE_UTF8, NULL }, 
    { "smac" , "sourceMacAddress", BSON_TYPE_UTF8, NULL }, 
    { "sntdom" , "sourceNtDomain", BSON_TYPE_UTF8, NULL }, 
+   { "sourceTranslatedPort" , NULL, BSON_TYPE_INT64, NULL }, 
    { "spid" , "sourceProcessId", BSON_TYPE_UTF8, NULL }, 
+   { "spriv" , "sourceUserPrivileges", BSON_TYPE_UTF8, NULL }, 
    { "sproc" , "sourceProcessName", BSON_TYPE_UTF8, NULL }, 
+   { "spt" , "sourcePort", BSON_TYPE_INT64, NULL }, 
+   { "srcPackets" , NULL, BSON_TYPE_INT64, NULL }, 
+   { "srcPort" , NULL, BSON_TYPE_INT32, NULL }, 
+   { "srcPostNATPort" , NULL, BSON_TYPE_INT32, NULL }, 
+   { "srcPreNATPort" , NULL, BSON_TYPE_INT32, NULL }, 
+   { "src" , "sourceAddress", BSON_TYPE_UTF8, NULL }, 
+   { "start" , "startTime", BSON_TYPE_DATE_TIME, NULL }, 
    { "suid" , "sourceUserId", BSON_TYPE_UTF8, NULL }, 
    { "suser" , "sourceUserName", BSON_TYPE_UTF8, NULL }, 
-   { "spriv" , "sourceUserPrivileges", BSON_TYPE_UTF8, NULL }, 
-   { "proto" , "transportProtocol", BSON_TYPE_UTF8, NULL }, 
-
-
-  { "devTime", "Device Time", BSON_TYPE_DATE_TIME, NULL} ,
-  {NULL, BSON_TYPE_EOD }
+   { "totalPackets" , NULL, BSON_TYPE_INT64, NULL }, 
 }  ;
 
 
+int compar(const void *a, const void *b)
+{
+  const char * key = (const char *)a;
+  const struct key_to_bson_type_tag *right = (const struct key_to_bson_type_tag *)b;
+
+  return strcmp(key, right->key);
+}
 
 void
 append_to_bson(bson_t **doc, raw_message_fields *all_fields, event_standard_t standard, const char *posix_date_format)
@@ -233,14 +239,9 @@ append_to_bson(bson_t **doc, raw_message_fields *all_fields, event_standard_t st
     const char *key = all_fields->fields[f].key ;
     const char *value = all_fields->fields[f].value;
 
-    int i = 0 ;
+    void *res = bsearch( key,  key_to_bson_type , sizeof(key_to_bson_type)/sizeof( key_to_bson_type[0]) , sizeof( struct key_to_bson_type_tag) , compar );
 
-    struct key_to_bson_type_tag * type_to_use = NULL;
-    for ( i = 0 ; key_to_bson_type[i].key && !type_to_use ; i++ ) {
-      if ( strcmp(key, key_to_bson_type[i].key) == 0  ) {
-        type_to_use = &key_to_bson_type[i];
-      }
-    }
+    struct key_to_bson_type_tag * type_to_use = (struct key_to_bson_type_tag * )res;
 
 
     if (type_to_use && standard == CEF_STANDARD && type_to_use->full_name ) {
