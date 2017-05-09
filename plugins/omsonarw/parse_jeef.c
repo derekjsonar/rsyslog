@@ -225,49 +225,50 @@ int compar(const void *a, const void *b)
   return strcmp(key, right->key);
 }
 
-void
-append_to_bson(bson_t **doc, raw_message_fields *all_fields, event_standard_t standard, const char *posix_date_format)
-{
+void append_to_bson(bson_t **doc, raw_message_fields *all_fields,
+                    event_standard_t standard, const char *posix_date_format) {
 
-  int f = 0 ;
+  int f = 0;
 
-  for ( f = 0 ; f < all_fields->last_field ; f++ ) {
+  for (f = 0; f < all_fields->last_field; f++) {
 
     struct tm tm;
     time_t event_time;
 
-    const char *key = all_fields->fields[f].key ;
+    const char *key = all_fields->fields[f].key;
     const char *value = all_fields->fields[f].value;
 
-    void *res = bsearch( key,  key_to_bson_type , sizeof(key_to_bson_type)/sizeof( key_to_bson_type[0]) , sizeof( struct key_to_bson_type_tag) , compar );
+    void *res = bsearch(key, key_to_bson_type,
+                        sizeof(key_to_bson_type) / sizeof(key_to_bson_type[0]),
+                        sizeof(struct key_to_bson_type_tag), compar);
 
-    struct key_to_bson_type_tag * type_to_use = (struct key_to_bson_type_tag * )res;
+    struct key_to_bson_type_tag *type_to_use =
+        (struct key_to_bson_type_tag *)res;
 
-
-    if (type_to_use && standard == CEF_STANDARD && type_to_use->full_name ) {
+    if (type_to_use && standard == CEF_STANDARD && type_to_use->full_name) {
       key = type_to_use->full_name;
     }
 
-    if ( type_to_use ) {
+    if (type_to_use) {
 
-      if ( value == NULL ) {
+      if (value == NULL) {
         value = type_to_use->default_value;
       }
 
       switch (type_to_use->type) {
-        case BSON_TYPE_INT32:
-          BCON_APPEND(*doc, BCON_UTF8(key), BCON_INT32(atoi(value)));
-          break;
-        case BSON_TYPE_DATE_TIME:
-          if ( strptime(value,posix_date_format, &tm ) == NULL ) {
-          } else {
-            event_time = mktime(&tm);
-            BCON_APPEND(*doc, BCON_UTF8(key), BCON_DATE_TIME(event_time*1000) );
-          }
-          break;
-        default:
-          BCON_APPEND(*doc, BCON_UTF8(key), BCON_UTF8(value));
-          break;  
+      case BSON_TYPE_INT32:
+        BCON_APPEND(*doc, BCON_UTF8(key), BCON_INT32(atoi(value)));
+        break;
+      case BSON_TYPE_DATE_TIME:
+        if (strptime(value, posix_date_format, &tm) == '\0') {
+        } else {
+          event_time = mktime(&tm);
+          BCON_APPEND(*doc, BCON_UTF8(key), BCON_DATE_TIME(event_time * 1000));
+        }
+        break;
+      default:
+        BCON_APPEND(*doc, BCON_UTF8(key), BCON_UTF8(value));
+        break;
       }
     } else {
       BCON_APPEND(*doc, BCON_UTF8(key), BCON_UTF8(value));
@@ -288,128 +289,121 @@ char map_to_leef_separator(const char *input) {
       ascii_code = (char)val;
     }
   } else if (strlen(input) == 1) {
-      ascii_code = input[0];
+    ascii_code = input[0];
   }
   free(strd_orig);
   return ascii_code;
 }
 
-int find_syslog_standard(const char *line, parsing_state *ps)
-{
-    if (line == NULL) {
-        return -1;
-    }
-    if (strstr(line, cef_format_hdr)) {
-        ps->attr_separator = ' ';
-        ps->standard = CEF_STANDARD;
-        ps->hdr_offset = 8;
-        return 0;
-    }
-    if (strstr(line, leef1_format_hdr)) {
-        ps->attr_separator = '\t';
-        ps->standard = LEEF1_STANDARD;
-        ps->hdr_offset = leef_hdrs_len;
-        return 0;
-    }
-    if (strstr(line, leef2_format_hdr)) {
-        ps->attr_separator = '\t';
-        ps->standard = LEEF2_STANDARD;
-        ps->hdr_offset = leef_hdrs_len+1;
-        return 0;
-    }
-
+int find_syslog_standard(const char *line, parsing_state *ps) {
+  if (line == NULL) {
     return -1;
+  }
+  if (strstr(line, cef_format_hdr)) {
+    ps->attr_separator = ' ';
+    ps->standard = CEF_STANDARD;
+    ps->hdr_offset = 8;
+    return 0;
+  }
+  if (strstr(line, leef1_format_hdr)) {
+    ps->attr_separator = '\t';
+    ps->standard = LEEF1_STANDARD;
+    ps->hdr_offset = leef_hdrs_len;
+    return 0;
+  }
+  if (strstr(line, leef2_format_hdr)) {
+    ps->attr_separator = '\t';
+    ps->standard = LEEF2_STANDARD;
+    ps->hdr_offset = leef_hdrs_len + 1;
+    return 0;
+  }
+
+  return -1;
 }
 
+int parse_cef(const char *line, bson_t **doc, parsing_state *ps) {
+  int i;
+  if (line == NULL) {
+    return -1;
+  }
+  char *cef_str = strdup(line);
+  char *cef_str_orig = cef_str;
+  char *tok_data, *tmp_tok_data, *key, *value;
 
-int parse_cef(const char *line, bson_t **doc, parsing_state *ps) 
-{
-    int i;
-    if (line == NULL) {
-        return -1;
-    }
-    char *cef_str = strdup(line);
-    char *cef_str_orig = cef_str;
-    char *tok_data, *key, *value;
+  *doc = BCON_NEW(cef_hdrs[0], BCON_UTF8(strsep(&cef_str, "|")));
 
-    *doc = BCON_NEW(cef_hdrs[0], BCON_UTF8(strsep(&cef_str, "|")));
+  for (i = 1; i < cef_hdrs_len; i++) {
+    BCON_APPEND(*doc, cef_hdrs[i], BCON_UTF8(strsep(&cef_str, "|")));
+  }
 
-    for (i=1; i<cef_hdrs_len; i++) {
-        BCON_APPEND(*doc, cef_hdrs[i], BCON_UTF8(strsep(&cef_str, "|")));
-    }
+  raw_message_fields *all_fields = get_new_message_fields_list();
 
-    raw_message_fields * all_fields = get_new_message_fields_list();
+  while ((tok_data = strsep(&cef_str, " ")) != NULL) {
+    key = strsep(&tok_data, "=");
+    value = tok_data;
+    printf("key: %s \t\t value: %s\n", key, value);
 
-    while ((tok_data = strsep(&cef_str, " ")) != NULL) 
-    {
-        key = strtok(tok_data, "=");
-        value = strtok(NULL, "=");
+    add_field(all_fields, key, value);
+  }
 
-        add_field(all_fields, key, value );
-    } 
+  const char *date_format = find_date_format(all_fields);
 
-    const char *date_format = find_date_format(all_fields);
+  append_to_bson(doc, all_fields, ps->standard, date_format);
 
-    append_to_bson(doc, all_fields, ps->standard, date_format);
+  free_new_message_fields_list(all_fields);
 
-    free_new_message_fields_list(all_fields);
-
-
-    if (cef_str_orig) {
-        free(cef_str_orig);
-    }
-    return 0;
+  if (cef_str_orig) {
+    free(cef_str_orig);
+  }
+  return 0;
 }
 
-int parse_leef(const char *line, bson_t **doc, parsing_state *ps) 
-{
-    int i;
-    if (line == NULL) {
-        return -1;
+int parse_leef(const char *line, bson_t **doc, parsing_state *ps) {
+  int i;
+  if (line == NULL) {
+    return -1;
+  }
+  char *leef_str = strdup(line);
+  char *leef_str_orig = leef_str;
+  char *tok_data, *key, *value;
+  char sep[2];
+
+  sep[0] = '|';
+  sep[1] = '\0';
+
+  *doc = BCON_NEW(leef_hdrs[0], BCON_UTF8(strsep(&leef_str, sep)));
+  for (i = 1; i < ps->hdr_offset; i++) {
+    if (i == ps->hdr_offset - 1 && ps->standard == LEEF2_STANDARD) {
+      sep[0] = map_to_leef_separator(strsep(&leef_str, sep));
+    } else {
+      BCON_APPEND(*doc, leef_hdrs[i], BCON_UTF8(strsep(&leef_str, sep)));
     }
-    char *leef_str = strdup(line);
-    char *leef_str_orig = leef_str;
-    char *tok_data, *key, *value;
-    char sep[2];
+  }
 
-    sep[0] = '|' ;
-    sep[1] = '\0' ;
+  if (ps->standard == LEEF1_STANDARD) {
+    sep[0] = '\t';
+  }
 
+  raw_message_fields *all_fields = get_new_message_fields_list();
 
+  while ((tok_data = strsep(&leef_str, sep)) != NULL) {
+    key = strsep(&tok_data, "=");
+    value = tok_data;
+    printf("key: %s \t\t value: %s\n", key, value);    
+    add_field(all_fields, key, value);
+  }
 
-    *doc = BCON_NEW(leef_hdrs[0], BCON_UTF8(strsep(&leef_str, sep)));
-    for (i=1; i< ps->hdr_offset; i++) {
-        if (i == ps->hdr_offset-1 && ps->standard == LEEF2_STANDARD) {
-            sep[0] = map_to_leef_separator(strsep(&leef_str, sep));
-        } else {
-          BCON_APPEND(*doc, leef_hdrs[i], BCON_UTF8(strsep(&leef_str, sep)));
-      }
-    }
+  const char *date_format = find_date_format(all_fields);
 
-    if ( ps->standard == LEEF1_STANDARD ) {
-      sep[0] = '\t' ;
-    }
+  append_to_bson(doc, all_fields, ps->standard, date_format);
 
-    raw_message_fields * all_fields = get_new_message_fields_list();
+  free_new_message_fields_list(all_fields);
 
-    while ((tok_data = strsep(&leef_str, sep)) != NULL) 
-    {
-        key = strtok(tok_data, "=");
-        value = strtok(NULL, "=");
-        add_field(all_fields, key, value );
-    } 
+  if (leef_str_orig) {
+    free(leef_str_orig);
+  }
 
-    const char *date_format = find_date_format(all_fields);
-
-    append_to_bson(doc, all_fields , ps->standard, date_format);
-    
-    free_new_message_fields_list(all_fields);
-
-    if (leef_str_orig) {
-        free(leef_str_orig);
-    }    
-
-    return 0;
+  return 0;
 }
 
 int parse_jeef(const char *line, bson_t **doc) {
