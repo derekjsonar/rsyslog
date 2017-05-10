@@ -19,7 +19,6 @@ int parse_cef(const char *line, bson_t **doc, parsing_state *ps) {
   char *tok_data, *tmp_tok_data, *key, *value;
 
   *doc = BCON_NEW(cef_hdrs[0], BCON_UTF8(strsep(&cef_str, "|")));
-
   for (i = 1; i < cef_hdrs_len; i++) {
     BCON_APPEND(*doc, cef_hdrs[i], BCON_UTF8(strsep(&cef_str, "|")));
   }
@@ -30,14 +29,11 @@ int parse_cef(const char *line, bson_t **doc, parsing_state *ps) {
     key = strsep(&tok_data, "=");
     value = tok_data;
     printf("key: %s \t\t value: %s\n", key, value);
-
     add_field(all_fields, key, value);
   }
 
   const char *date_format = find_date_format(all_fields);
-
   append_to_bson(doc, all_fields, ps->standard, date_format);
-
   free_new_message_fields_list(all_fields);
 
   if (cef_str_orig) {
@@ -82,9 +78,7 @@ int parse_leef(const char *line, bson_t **doc, parsing_state *ps) {
   }
 
   const char *date_format = find_date_format(all_fields);
-
   append_to_bson(doc, all_fields, ps->standard, date_format);
-
   free_new_message_fields_list(all_fields);
 
   if (leef_str_orig) {

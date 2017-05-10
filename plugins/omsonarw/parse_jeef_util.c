@@ -12,6 +12,14 @@ struct java_to_POSIX_date_format_tag {
     {"MMM dd yyyy HH:mm:ss", "%b %d %Y %H:%M:%S"},
     {"MMM dd yyyy HH:mm:ss.SSS", "%b %d %Y %H:%M:%S.000"},
     {"MMM dd yyyy HH:mm:ss.SSS z", "%b %d %Y %H:%M:%S.000 %Z"},
+    {"MMM dd HH:mm:ss.SSS zzz", "%b %d %H:%M:%S.000 %Z"},
+    {"MMM dd HH:mm:ss.SSS", "%b %d %H:%M:%S.000"},
+    {"MMM dd HH:mm:ss zzz", "%b %d %H:%M:%S %Z"},
+    {"MMM dd HH:mm:ss", "%b %d %H:%M:%S"},
+    {"MMM dd yyyy HH:mm:ss.SSS zzz", "%b %d %Y %H:%M:%S.000 %Z"},
+    {"MMM dd yyyy HH:mm:ss.SSS", "%b %d %Y %H:%M:%S.000"},
+    {"MMM dd yyyy HH:mm:ss zzz", "%b %d %Y %H:%M:%S %Z"},
+    {"MMM dd yyyy HH:mm:ss", "%b %d %Y %H:%M:%S"},
     {NULL, NULL}};
 
 const char *convert_java_date_format_to_posix(const char *java_format) {
@@ -72,7 +80,7 @@ struct key_to_bson_type_tag {
     {"cat", "deviceEventCategory", BSON_TYPE_UTF8, NULL},
     {"catdt", "categoryDeviceType", BSON_TYPE_UTF8, NULL},
     {"_cefVer", "cefVersion", BSON_TYPE_UTF8, NULL},
-    {"cfp1", NULL, BSON_TYPE_DOUBLE, NULL},
+    {"cn1", NULL, BSON_TYPE_DOUBLE, NULL},
     {"cfp2", NULL, BSON_TYPE_DOUBLE, NULL},
     {"cfp3", NULL, BSON_TYPE_DOUBLE, NULL},
     {"cfp4", NULL, BSON_TYPE_DOUBLE, NULL},
@@ -143,6 +151,31 @@ struct key_to_bson_type_tag {
     {"suid", "sourceUserId", BSON_TYPE_UTF8, NULL},
     {"suser", "sourceUserName", BSON_TYPE_UTF8, NULL},
     {"totalPackets", NULL, BSON_TYPE_INT64, NULL},
+};
+
+struct cef_custom_field_remap_tag {
+  const char *orig_key;
+  bson_type_t type;
+  const char *new_key;
+  const char *value;
+} cef_custom_field_remap[] = {
+    {"c6a1", BSON_TYPE_UTF8, NULL, NULL},
+    {"c6a2", BSON_TYPE_UTF8, NULL, NULL},
+    {"c6a3", BSON_TYPE_UTF8, NULL, NULL},
+    {"c6a4", BSON_TYPE_UTF8, NULL, NULL},
+    {"cfp1", BSON_TYPE_DOUBLE, NULL, NULL},
+    {"cfp2", BSON_TYPE_DOUBLE, NULL, NULL},
+    {"cfp3", BSON_TYPE_DOUBLE, NULL, NULL},
+    {"cfp4", BSON_TYPE_DOUBLE, NULL, NULL},
+    {"cn1", BSON_TYPE_INT64, NULL, NULL},
+    {"cn2", BSON_TYPE_INT64, NULL, NULL},
+    {"cn3", BSON_TYPE_INT64, NULL, NULL},
+    {"cs1", BSON_TYPE_UTF8, NULL, NULL},
+    {"cs2", BSON_TYPE_UTF8, NULL, NULL},
+    {"cs3", BSON_TYPE_UTF8, NULL, NULL},
+    {"cs4", BSON_TYPE_UTF8, NULL, NULL},
+    {"cs5", BSON_TYPE_UTF8, NULL, NULL},
+    {"cs6", BSON_TYPE_UTF8, NULL, NULL},
 };
 
 int compar(const void *a, const void *b) {
