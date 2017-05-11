@@ -12,19 +12,19 @@ using namespace boost;
 
 int main()
 {
-    std::string input_line;
-    std::string working_line;
+    string inputLine;
+    string workingLine;
     vector<string> splitFields;
 
-    while (getline(cin, input_line)) {
-        split_regex(splitFields, input_line, regex("QWE"));
+    while (getline(cin, inputLine)) {
+        split_regex(splitFields, inputLine, regex("QWE"));
         if (!splitFields.empty()) {
-            working_line += splitFields[0];
+            workingLine += splitFields[0];
         }
         for (size_t i = 1; i < splitFields.size(); ++i) {
-            cout << "-->" << working_line << endl;
-            working_line.clear();
-            working_line += splitFields[i];
+            cout << "-->" << workingLine << endl;
+            workingLine.clear();
+            workingLine += splitFields[i];
         }
     }
 
