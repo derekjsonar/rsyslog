@@ -1,10 +1,7 @@
 // compile with
 // g++ -std=c++11 -L/usr/lib64 -lboost_regex -o test_stream test_stream.cpp
 #include <iostream>
-#include <sstream>
 #include <vector>
-#include <array>
-#include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
 
 using namespace std;
